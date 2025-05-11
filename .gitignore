@@ -136,3 +136,4 @@ build
 .localstack
 output.txt
 downloads
+data/chunks/
