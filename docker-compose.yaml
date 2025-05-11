@@ -1,0 +1,43 @@
+services:
+  packager:
+    build: ./packager
+    volumes:
+      - ./:/src
+
+  aws-cli:
+    image: amazon/aws-cli
+    environment:
+      - AWS_DEFAULT_REGION=eu-west-1
+      - AWS_ACCESS_KEY_ID=key
+      - AWS_SECRET_ACCESS_KEY=secret
+    networks:
+      - compliance_tech_recruitment_assignment
+    volumes:
+      # share lambda source code with localstack
+      - ./build:/build
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack_compliance_tech_recruitment_assignment
+    ports:
+      - "4566:4566" # LocalStack edge port
+      - '8055:8080'
+    environment:
+      - SERVICES=s3,lambda,events,stepfunctions
+      - DEBUG=1
+      - LAMBDA_EXECUTOR=docker
+      # set AWS configrations for localstack
+      - AWS_DEFAULT_REGION=eu-west-1
+      - AWS_ACCESS_KEY_ID=key
+      - AWS_SECRET_ACCESS_KEY=secret
+    networks:
+      - compliance_tech_recruitment_assignment
+    volumes:
+      # share lambda source code with localstack
+      - ./build:/etc/localstack/init/build
+      # localstack needs docker to run lambdas
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+networks:
+  compliance_tech_recruitment_assignment:
+    driver: bridge

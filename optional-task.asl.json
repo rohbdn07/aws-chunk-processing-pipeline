@@ -1,0 +1,16 @@
+{
+    "Comment": "Split and send report by chunks",
+    "StartAt": "SplitLargeReport",
+        "States": {
+        "SplitLargeReport": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:eu-west-1:000000000000:function:splitter",
+            "Next": "SendReportByChunks"
+        },
+        "SendReportByChunks": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:eu-west-1:000000000000:function:sender",
+            "End": true
+        }
+    }
+}

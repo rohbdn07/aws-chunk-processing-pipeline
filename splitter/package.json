@@ -1,0 +1,14 @@
+{
+  "name": "splitter",
+  "version": "1.0.0",
+  "description": "This function is implemented by a candidate. It should split a large file to smaller chunks and optionally store them in S3 bucket.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo 'no tests for this module'"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "stream-json": "^1.9.1"
+  }
+}
