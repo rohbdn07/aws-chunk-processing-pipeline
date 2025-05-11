@@ -28,7 +28,7 @@ const splitLargeJson = (inputFile, outputDir, chunkSize) => {
         let chunks = [];
         let chunkIndex = 1;
         let totalRecords = 0;
-        const chunkFiles = []; // To store the names of created chunk files
+        const chunkFiles = []; 
     
         // Check for duplicates
         const uniqueKey = new Set();
@@ -47,7 +47,6 @@ const splitLargeJson = (inputFile, outputDir, chunkSize) => {
             } else {
                 uniqueKey.add(playerId)
             }
-            
             chunks.push(value)
             totalRecords++
     
@@ -67,8 +66,8 @@ const splitLargeJson = (inputFile, outputDir, chunkSize) => {
                 const outputFile = `${outputDir}/chunk_${chunkIndex}.json`
                 fs.writeFileSync(outputFile, JSON.stringify(chunks, null, 2))
                 console.log(`Created file: ${outputFile} with ${chunks.length} records`);
+                chunkFiles.push(`chunk_${chunkIndex}.json`); 
             }
-    
             console.log(`Total records processed: ${totalRecords}`);
             console.log(`Total chunks created: ${chunkIndex}`);
     
@@ -123,22 +122,8 @@ const processChunks = async () => {
     }
 };
 
-
 // Call the async function
 processChunks();
 
-
-/* const keysToChunks = splitLargeJson(inputFile, outputDir, chunkSize)
-    .then((chunkFiles) => {
-        console.log('Chunks created:', chunkFiles);
-        return chunkFiles;
-    })
-    .catch((error) => {
-        console.error('Error:', error.message);
-    });
-
-
-// const keysToChunks = splitLargeJson(inputFile, outputDir, chunkSize);
-console.log('Keys to Chunks:', keysToChunks); */
 
 
