@@ -6,10 +6,28 @@ const { chain } = require('stream-chain');
 const path = require('path');
 
 
-
+/**
+ * AWS Lambda handler function to process a large JSON file, split it into chunks,
+ * and upload the chunks to an S3 bucket.
+ *
+ * Workflow:
+ * 1. Reads a large JSON file from the local file system.
+ * 2. Splits the JSON data into smaller chunks based on a specified chunk size.
+ * 3. Generates unique S3 keys for each chunk.
+ * 4. Uploads each chunk to the specified S3 bucket.
+ *
+ * Environment Variables:
+ * - BUCKET_NAME: The name of the S3 bucket where the chunks will be uploaded.
+ * - AWS_REGION: The name of AWS region.
+ * - LOCALSTACK_ENDPOINT: The name of localstack endpoint. Running LocalStack to emulate AWS services locally.
+ *
+ * @async
+ * @function
+ * @returns {Promise<Object>} An object containing the keys of the uploaded chunks.
+ * @throws {Error} If an error occurs during processing or uploading.
+ */
 exports.handler = async () => {
     const inputFile = '../data/mock-rud.json'
-    // const inputFile = '../data/moc-duplicate-rud.json';
     const outputDir = '../data/chunks';
     const chunkSize = 3000;
     const bucketName = process.env.BUCKET_NAME || 'report-store'
@@ -79,10 +97,11 @@ const splitLargeJsonData = (inputFile, outputDir, chunkSize) => {
                 fs.writeFileSync(outputFile, JSON.stringify(chunks, null, 2));
                 chunkFiles.push(generateKey(chunkIndex));
                 chunkIndex++
+
                 // Calculate the memory size of the chunk
                 const chunkSizeInBytes = Buffer.byteLength(JSON.stringify(chunks), 'utf8');
                 const chunkSizeInMB = (chunkSizeInBytes / (1024 * 1024)).toFixed(2);
-                console.log(`Created file: ${outputFile} with ${chunks.length} records. Chunk size: ${chunkSizeInMB} MB`);
+                console.info(`Created file: ${outputFile} with ${chunks.length} records. Chunk size: ${chunkSizeInMB} MB`);
                 chunks = [];
             }
         });
@@ -96,19 +115,18 @@ const splitLargeJsonData = (inputFile, outputDir, chunkSize) => {
                 const chunkSizeInMB = (chunkSizeInBytes / (1024 * 1024)).toFixed(2);
                 console.log(`Created file: ${outputFile} with ${chunks.length} records. Chunk size: ${chunkSizeInMB} MB`);
                 chunkFiles.push(generateKey(chunkIndex));
-
             }
-            console.log(`Total records processed: ${totalRecords}`);
-            console.log(`Total chunks created: ${chunkIndex}`);
+            console.info(`Total records processed: ${totalRecords}`);
+            console.info(`Total chunks created: ${chunkIndex}`);
 
             // Checks for duplicates
             if (duplicates.length > 0) {
                 reject(
-                    new Error(`Duplicate records detected in the input JSON file, Duplicate file: ${duplicates.length}`)
+                    new Error(`Duplicate records detected in the input JSON file. Duplicate file: ${duplicates.length}`)
                 );
                 return;
             } else {
-                console.log('No duplicate records found.');
+                console.info('No duplicate records found.');
             }
 
             // Verify no data loss at the end of the process
@@ -119,7 +137,7 @@ const splitLargeJsonData = (inputFile, outputDir, chunkSize) => {
                 );
                 return;
             } else {
-                console.log('Data check passed: NO records lost');
+                console.info('Data check passed: NO records lost');
             }
 
             // Resolve the promise with the list of chunk files
@@ -141,7 +159,6 @@ const uploadChunksDataToS3 = async (bucketName, key, filePath) => {
         endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566',
         forcePathStyle: true,
     });
-
     try {
         const fileContent = fs.readFileSync(filePath);
         const s3details = {
@@ -151,13 +168,11 @@ const uploadChunksDataToS3 = async (bucketName, key, filePath) => {
             ContentType: 'application/json'
         }
         await s3Client.send(new PutObjectCommand(s3details));
-        console.log(`File uploaded to S3: ${key}`);
+        console.info(`File uploaded to S3: ${key}`);
 
     } catch (error) {
         console.error(`Error uploading file to S3: ${key}`, error);
     }
-
-
 }
 
 exports.handler();
