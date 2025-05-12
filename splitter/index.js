@@ -164,8 +164,6 @@ const uploadChunksDataToS3 = async (bucketName, key, filePath) => {
     }
 }
 
-exports.handler();
-
 
 
 
