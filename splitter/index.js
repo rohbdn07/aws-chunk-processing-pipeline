@@ -97,11 +97,7 @@ const splitLargeJsonData = (inputFile, outputDir, chunkSize) => {
                 fs.writeFileSync(outputFile, JSON.stringify(chunks, null, 2));
                 chunkFiles.push(generateKey(chunkIndex));
                 chunkIndex++
-
-                // Calculate the memory size of the chunk
-                const chunkSizeInBytes = Buffer.byteLength(JSON.stringify(chunks), 'utf8');
-                const chunkSizeInMB = (chunkSizeInBytes / (1024 * 1024)).toFixed(2);
-                console.info(`Created file: ${outputFile} with ${chunks.length} records. Chunk size: ${chunkSizeInMB} MB`);
+                console.info(`Created file: ${outputFile} with ${chunks.length} records.`);
                 chunks = [];
             }
         });
@@ -110,10 +106,7 @@ const splitLargeJsonData = (inputFile, outputDir, chunkSize) => {
             if (chunks.length > 0) {
                 const outputFile = `${outputDir}/chunk_${chunkIndex}.json`;
                 fs.writeFileSync(outputFile, JSON.stringify(chunks, null, 2));
-                // Calculate the memory size of the chunk
-                const chunkSizeInBytes = Buffer.byteLength(JSON.stringify(chunks), 'utf8');
-                const chunkSizeInMB = (chunkSizeInBytes / (1024 * 1024)).toFixed(2);
-                console.log(`Created file: ${outputFile} with ${chunks.length} records. Chunk size: ${chunkSizeInMB} MB`);
+                console.log(`Created file: ${outputFile} with ${chunks.length} records.`);
                 chunkFiles.push(generateKey(chunkIndex));
             }
             console.info(`Total records processed: ${totalRecords}`);
