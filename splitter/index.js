@@ -34,16 +34,12 @@ exports.handler = async () => {
 
     try {
         const keysToChunks = await splitLargeJsonData(inputFile, outputDir, chunkSize);
-        console.log('Chunks created:', {
-            keysToChunks: keysToChunks
-        });
+        console.info('Chunks created:', {keysToChunks:keysToChunks});
         for (const key of keysToChunks) {
             const filePath = path.join(outputDir, path.basename(key));
             await uploadChunksDataToS3(bucketName, key, filePath)
         }
-        return {
-            keysToChunks: keysToChunks
-        };
+        return {keysToChunks: keysToChunks};
     } catch (error) {
         console.error('Error:', error.message);
     }
@@ -69,7 +65,7 @@ const splitLargeJsonData = (inputFile, outputDir, chunkSize) => {
         let chunks = [];
         let chunkIndex = 1;
         let totalRecords = 0;
-        const chunkFiles = [];
+        const keysToChunks = [];
 
         // Check for duplicates
         const uniqueKey = new Set();
@@ -95,7 +91,7 @@ const splitLargeJsonData = (inputFile, outputDir, chunkSize) => {
             if (chunks.length === chunkSize) {
                 const outputFile = `${outputDir}/chunk_${chunkIndex}.json`;
                 fs.writeFileSync(outputFile, JSON.stringify(chunks, null, 2));
-                chunkFiles.push(generateKey(chunkIndex));
+                keysToChunks.push(generateKey(chunkIndex));
                 chunkIndex++
                 console.info(`Created file: ${outputFile} with ${chunks.length} records.`);
                 chunks = [];
@@ -107,7 +103,7 @@ const splitLargeJsonData = (inputFile, outputDir, chunkSize) => {
                 const outputFile = `${outputDir}/chunk_${chunkIndex}.json`;
                 fs.writeFileSync(outputFile, JSON.stringify(chunks, null, 2));
                 console.log(`Created file: ${outputFile} with ${chunks.length} records.`);
-                chunkFiles.push(generateKey(chunkIndex));
+                keysToChunks.push(generateKey(chunkIndex));
             }
             console.info(`Total records processed: ${totalRecords}`);
             console.info(`Total chunks created: ${chunkIndex}`);
@@ -134,7 +130,7 @@ const splitLargeJsonData = (inputFile, outputDir, chunkSize) => {
             }
 
             // Resolve the promise with the list of chunk files
-            resolve(chunkFiles);
+            resolve(keysToChunks);
 
         });
 
