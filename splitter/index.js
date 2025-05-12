@@ -1,24 +1,11 @@
-/* exports.handler = async (event) => {
-    console.info(`Splitter input: %s`, event);
-    return {
-        keysToChunks: [
-            'key1',
-            'key2',
-            'key3'
-        ]
-    }
-}; */
-
-
 const fs = require('fs');
 const { parser } = require('stream-json');
 const { streamArray } = require('stream-json/streamers/StreamArray');
 const { chain } = require('stream-chain');
-const { rejects } = require('assert');
+
 
 const splitLargeJson = (inputFile, outputDir, chunkSize) => {
-    return new Promise((resolve, reject) => {
-
+    return new Promise( (resolve, reject) => {
         const pipeline = chain([
             fs.createReadStream(inputFile),
             parser(),
@@ -54,18 +41,25 @@ const splitLargeJson = (inputFile, outputDir, chunkSize) => {
             if(chunks.length === chunkSize) {
                 const outputFile = `${outputDir}/chunk_${chunkIndex}.json`
                 fs.writeFileSync(outputFile, JSON.stringify(chunks, null, 2))
-                console.log(`Created file: ${outputFile} with ${chunks.length} records`);
+                
                 chunkFiles.push(`chunk_${chunkIndex}.json`);
                 chunkIndex++
+                // Calculate the memory size of the chunk
+                const chunkSizeInBytes = Buffer.byteLength(JSON.stringify(chunks), 'utf8');
+                const chunkSizeInMB = (chunkSizeInBytes / (1024 * 1024)).toFixed(2);                 
+                console.log(`Created file: ${outputFile} with ${chunks.length} records. Chunk size: ${chunkSizeInMB} MB`);
                 chunks = []
             }
         });
     
         pipeline.on('end', () => {
             if(chunks.length > 0) {
-                const outputFile = `${outputDir}/chunk_${chunkIndex}.json`
+                const outputFile = `${outputDir}/chunk_${chunkIndex}.json`;
                 fs.writeFileSync(outputFile, JSON.stringify(chunks, null, 2))
-                console.log(`Created file: ${outputFile} with ${chunks.length} records`);
+                // Calculate the memory size of the chunk
+                const chunkSizeInBytes = Buffer.byteLength(JSON.stringify(chunks), 'utf8');
+                const chunkSizeInMB = (chunkSizeInBytes / (1024 * 1024)).toFixed(2);
+                console.log(`Created file: ${outputFile} with ${chunks.length} records. Chunk size: ${chunkSizeInMB} MB`);
                 chunkFiles.push(`chunk_${chunkIndex}.json`); 
             }
             console.log(`Total records processed: ${totalRecords}`);
@@ -73,9 +67,8 @@ const splitLargeJson = (inputFile, outputDir, chunkSize) => {
     
             // Checks for duplicates
             if(duplicates.length > 0) {
-                console.error(`Duplicate records found: ${duplicates.length}`);
                 reject(
-                    new Error('Duplicate records detected in the input JSON file')
+                    new Error(`Duplicate records detected in the input JSON file, Duplicate file: ${duplicates.length}`)
                 );
                 return;
             } else {
@@ -112,18 +105,32 @@ const inputFile = '../data/mock-rud.json'
 const outputDir = '../data/chunks';
 const chunkSize = 3000;
 
-const processChunks = async () => {
+exports.handler = async () => {
     try {
         const keysToChunks = await splitLargeJson(inputFile, outputDir, chunkSize);
-        console.log('Chunks created:', keysToChunks);
-        return keysToChunks; // Now keysToChunks contains the resolved value
+        console.log('Chunks created:', {
+            keysToChunks: keysToChunks
+        });
+        return {
+            keysToChunks: keysToChunks
+        }; 
     } catch (error) {
         console.error('Error:', error.message);
     }
 };
 
+exports.handler();
+
+/* splitLargeJson(inputFile, outputDir, chunkSize)
+    .then((chunkFiles) => {
+        console.log('Chunks created:', chunkFiles);
+    })
+    .catch((error) => {
+        console.error('Error:', error.message);
+    }); */
+
 // Call the async function
-processChunks();
+// processChunks();
 
 
 
