@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.806.0",
     "stream-json": "^1.9.1"
   }
 }
