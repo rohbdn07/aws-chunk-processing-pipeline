@@ -1,6 +1,14 @@
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const JSONStream = require('JSONStream');
 
+
+/**
+ * NOTE TO DEVELOPERS:
+ *
+ * The Step Function (optional-task.asl.json) now sends only a single key in the keysToChunks array.
+ * You can simplify this handler by removing the for-loop and processing just the first key in keysToChunks.
+ * This change improves clarity and efficiency since only one chunk key will be provided per invocation.
+ */
 exports.handler = async (event) => {
     console.info(`Received splitter output: ${JSON.stringify(event)}`);
     validateInputEvent(event);
