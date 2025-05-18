@@ -6,24 +6,25 @@ const { Writable } = require('stream');
 
 
 /**
- * AWS Lambda handler function to process a large JSON file, split it into chunks,
- * and upload the chunks to an S3 bucket.
+ * AWS Lambda handler function to process a large JSON file from S3, split it into chunks,
+ * and upload the chunks back to S3. Ensures data integrity by rolling back uploads if any data loss is detected.
  *
  * Workflow:
- * 1. Reads a large JSON file from S3 bucket.
- * 2. Splits the JSON data into smaller chunks based on a specified chunk size.
+ * 1. Reads a large JSON file from an S3 bucket.
+ * 2. Streams and splits the JSON array into smaller chunks based on a specified chunk size.
  * 3. Generates unique S3 keys for each chunk.
- * 4. Uploads each chunk to the specified S3 bucket.
- * 5. Rollback (delete) uploaded chunks files if total chunks size is not equal to total original records.
+ * 4. Uploads each chunk to the specified S3 bucket, batching uploads for efficiency.
+ * 5. If the total number of records uploaded does not match the original, deletes all uploaded chunks (rollback).
  *
  * Environment Variables:
  * - BUCKET_NAME: The name of the S3 bucket where the chunks will be uploaded.
- * - AWS_REGION: The name of AWS region.
- * - LOCALSTACK_ENDPOINT: The name of localstack endpoint. Running LocalStack to emulate AWS services locally.
+ * - AWS_REGION: The AWS region.
+ * - LOCALSTACK_ENDPOINT: The LocalStack endpoint for local AWS emulation.
  *
- * @async
- * @function
- * @returns {Promise<Object>} An object containing the keys of the uploaded chunks.
+ * @param {Object} event - Lambda event object containing at least the S3 key and optionally the bucket name.
+ * @param {string} event.key - The S3 key of the input JSON file.
+ * @param {string} [event.bucketName] - The S3 bucket name.
+ * @returns {Promise<{keysToChunks: string[]}>} An object containing the keys of the uploaded chunks.
  * @throws {Error} If an error occurs during processing or uploading.
  */
 exports.handler = async (event) => {
@@ -46,13 +47,12 @@ exports.handler = async (event) => {
         const largeJsonData = resp.Body;
         console.info(`Successfully retrieved data from S3 for key: ${key}`);
 
+        const keysToChunks = [];
         let chunkNumber = 1;
         let chunks = [];
-        const keysToChunks = [];
         let uploadPromises = [];
-        let totalRecords = 0;
+        let totalOriginalRecords = 0;
         let chunkTotalRecords = [];
-
 
         const processBatchUploads = async () => {
             if (uploadPromises.length > 0) {
@@ -61,13 +61,14 @@ exports.handler = async (event) => {
             }
         }
 
+        // Writable stream to collect, batch, and upload JSON chunks to S3.
         const writable = new Writable({
             objectMode: true,
             async write({ value }, _, callback) {
                 try {
                     if (value) {
                         chunks.push(value);
-                        totalRecords++
+                        totalOriginalRecords++
 
                         // Upload when chunk size is reached
                         if (chunks.length == CHUNK_SIZE) {
@@ -108,7 +109,6 @@ exports.handler = async (event) => {
                     console.error("Error in uploading final chunk:", error);
                     callback(error);
                 }
-
             }
         });
 
@@ -123,24 +123,23 @@ exports.handler = async (event) => {
             );
         });
 
-        // Total from multiple chunks records 
+        // Total chunks from multiple chunks records 
         const totalChunksRecords = chunkTotalRecords.reduce((accumulator, currentValue) => accumulator + currentValue, 0);
 
         // Verify no data loss at the end of the process
-        if (totalRecords !== totalChunksRecords) {
+        if (totalOriginalRecords !== totalChunksRecords) {
             await rollBackUploadsFromS3(bucketName, keysToChunks);
             console.info(
-                `ℹ️ Data integrity check failed (data lost): Original records (${totalRecords}) do not match written records (${totalChunksRecords}).\nℹ️ ROLLBACK: All chunk files have been deleted due to data integrity failure.`
+                `ℹ️ Data integrity check failed (data lost): Original records (${totalOriginalRecords}) do not match written records (${totalChunksRecords}).\nℹ️ ROLLBACK: All chunk files have been deleted due to data integrity failure.`
             );
-            throw new Error(`Data check failed: Total records (${totalRecords} do not match unique records (${totalChunksRecords})`);
+            throw new Error(`Data check failed: Total records (${totalOriginalRecords} do not match unique records (${totalChunksRecords})`);
         } else {
             console.info('ℹ️ Data check passed: No records lost');
         }
-
         console.info(`✅ Successfully uploaded ${chunkNumber} chunks files to S3.`);
 
-        // Return S3 keys
         return { keysToChunks };
+        
     } catch (error) {
         console.error("❌ Error processing file:", error);
         throw error;
@@ -170,6 +169,7 @@ async function rollBackUploadsFromS3(bucketName, fileKeys) {
     }
 }
 
+// Generate chunk file name
 const generateKey = (chunkNumber) => {
     const projectName = "projectA";
     const date = new Date();
@@ -180,14 +180,21 @@ const generateKey = (chunkNumber) => {
 };
 
 
-// Upload data chunks to S3 bucket
+/**
+ * Uploads a chunk of JSON data to the specified S3 bucket and key.
+ *
+ * @param {string} bucketName - The name of the S3 bucket.
+ * @param {string} key - The S3 object key for the chunk file.
+ * @param {Array} data - The chunk of data to upload.
+ * @returns {Promise<void>}
+ * @throws {Error} If the upload to S3 fails.
+ */
 const uploadChunksDataToS3 = async (bucketName, key, data) => {
     const s3Client = new S3Client({
         region: process.env.AWS_REGION || 'eu-west-1',
         endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_compliance_tech_recruitment_assignment:4566',
         forcePathStyle: true,
     });
-
     try {
         const s3details = {
             Bucket: bucketName,
