@@ -1,9 +1,8 @@
-const fs = require('fs');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 const { parser } = require('stream-json');
 const { streamArray } = require('stream-json/streamers/StreamArray');
-const { chain } = require('stream-chain');
-const path = require('path');
+const { pipeline } = require('stream');
+const { Writable } = require('stream');
 
 
 /**
@@ -11,10 +10,11 @@ const path = require('path');
  * and upload the chunks to an S3 bucket.
  *
  * Workflow:
- * 1. Reads a large JSON file from the local file system.
+ * 1. Reads a large JSON file from S3 bucket.
  * 2. Splits the JSON data into smaller chunks based on a specified chunk size.
  * 3. Generates unique S3 keys for each chunk.
  * 4. Uploads each chunk to the specified S3 bucket.
+ * 5. Rollback (delete) uploaded chunks files if total chunks size is not equal to total original records.
  *
  * Environment Variables:
  * - BUCKET_NAME: The name of the S3 bucket where the chunks will be uploaded.
@@ -26,145 +26,181 @@ const path = require('path');
  * @returns {Promise<Object>} An object containing the keys of the uploaded chunks.
  * @throws {Error} If an error occurs during processing or uploading.
  */
-exports.handler = async () => {
-    const inputFile = '../data/mock-rud.json'
-    const outputDir = '../data/chunks';
-    const chunkSize = 3000;
-    const bucketName = process.env.BUCKET_NAME || 'report-store'
+exports.handler = async (event) => {
+    const CHUNK_SIZE = 3000;
+    const BATCH_SIZE = 2;
+    const key = event.key;
+    const bucketName = process.env.BUCKET_NAME || event.bucketName || 'report-store'
 
     try {
-        const keysToChunks = await splitLargeJsonData(inputFile, outputDir, chunkSize);
-        console.info('Chunks created:', {keysToChunks:keysToChunks});
-        for (const key of keysToChunks) {
-            const filePath = path.join(outputDir, path.basename(key));
-            await uploadChunksDataToS3(bucketName, key, filePath)
+        if (!bucketName || !key) {
+            throw new Error('Missing required parameters: bucketName or key');
         }
-        return {keysToChunks: keysToChunks};
+        const params = {
+            Bucket: bucketName,
+            Key: key,
+            ResponseContentType: 'application/json',
+        };
+        const s3Client = new S3Client();
+        const resp = await s3Client.send(new GetObjectCommand(params));
+        const largeJsonData = resp.Body;
+        console.info(`Successfully retrieved data from S3 for key: ${key}`);
+
+        let chunkNumber = 1;
+        let chunks = [];
+        const keysToChunks = [];
+        let uploadPromises = [];
+        let totalRecords = 0;
+        let chunkTotalRecords = [];
+
+
+        const processBatchUploads = async () => {
+            if (uploadPromises.length > 0) {
+                await Promise.all(uploadPromises);
+                uploadPromises = [];
+            }
+        }
+
+        const writable = new Writable({
+            objectMode: true,
+            async write({ value }, _, callback) {
+                try {
+                    if (value) {
+                        chunks.push(value);
+                        totalRecords++
+
+                        // Upload when chunk size is reached
+                        if (chunks.length == CHUNK_SIZE) {
+                            let chunkKey = generateKey(chunkNumber)
+                            keysToChunks.push(chunkKey);
+                            const uploadPromise = uploadChunksDataToS3(bucketName, chunkKey, chunks);
+                            uploadPromises.push(uploadPromise);
+                            chunkTotalRecords.push(chunks.length);
+                            chunks = [];
+                            chunkNumber++;
+
+                            // When batch size is reached, upload batch
+                            if (uploadPromises.length >= BATCH_SIZE) {
+                                await processBatchUploads()
+                            }
+                        }
+                    }
+                    callback();
+                } catch (error) {
+                    console.error("Error writing stream:", error)
+                    callback(error);
+                }
+            },
+
+            async final(callback) {
+                try {
+                    // Upload any remaining data
+                    if (chunks.length > 0) {
+                        const chunkKey = generateKey(chunkNumber);
+                        keysToChunks.push(chunkKey);
+                        uploadPromises.push(uploadChunksDataToS3(bucketName, chunkKey, chunks));
+                        chunkTotalRecords.push(chunks.length);
+                    }
+                    await processBatchUploads();
+                    console.info(`ℹ️ Final chunk uploaded. Total chunks: ${chunkNumber}`);
+                    callback();
+                } catch (error) {
+                    console.error("Error in uploading final chunk:", error);
+                    callback(error);
+                }
+
+            }
+        });
+
+        // Stream pipeline to process JSON in chunks
+        await new Promise((resolve, reject) => {
+            pipeline(
+                largeJsonData,
+                parser(),
+                streamArray(),
+                writable,
+                (err) => (err ? reject(err) : resolve())
+            );
+        });
+
+        // Total from multiple chunks records 
+        const totalChunksRecords = chunkTotalRecords.reduce((accumulator, currentValue) => accumulator + currentValue, 0);
+
+        // Verify no data loss at the end of the process
+        if (totalRecords !== totalChunksRecords) {
+            await rollBackUploadsFromS3(bucketName, keysToChunks);
+            console.info(
+                `ℹ️ Data integrity check failed (data lost): Original records (${totalRecords}) do not match written records (${totalChunksRecords}).\nℹ️ ROLLBACK: All chunk files have been deleted due to data integrity failure.`
+            );
+            throw new Error(`Data check failed: Total records (${totalRecords} do not match unique records (${totalChunksRecords})`);
+        } else {
+            console.info('ℹ️ Data check passed: No records lost');
+        }
+
+        console.info(`✅ Successfully uploaded ${chunkNumber} chunks files to S3.`);
+
+        // Return S3 keys
+        return { keysToChunks };
     } catch (error) {
-        console.error('Error:', error.message);
+        console.error("❌ Error processing file:", error);
+        throw error;
     }
 };
 
-// Split  large Json data into chunks
-const splitLargeJsonData = (inputFile, outputDir, chunkSize) => {
-    const projectName = "projectA";
-    const date = new Date().toISOString().split('T')[0];
-    const dataType = "data/chunks";
 
-    const generateKey = (chunkIndex) => {
-        return `${projectName}/${date}/${dataType}/chunk_${chunkIndex}.json`;
-    };
-
-    return new Promise((resolve, reject) => {
-        const pipeline = chain([
-            fs.createReadStream(inputFile),
-            parser(),
-            streamArray()
-        ])
-
-        let chunks = [];
-        let chunkIndex = 1;
-        let totalRecords = 0;
-        const keysToChunks = [];
-
-        // Check for duplicates
-        const uniqueKey = new Set();
-        const duplicates = [];
-
-        if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir);
-        }
-
-        pipeline.on('data', ({ value }) => {
-            const playerId = value.player_id;
-
-            // Check for duplicate player_id
-            if (uniqueKey.has(playerId)) {
-                duplicates.push(value);
-            } else {
-                uniqueKey.add(playerId);
-            }
-            chunks.push(value);
-            totalRecords++
-
-            // If the chunks length reaches the given chunk size, write it to a file
-            if (chunks.length === chunkSize) {
-                const outputFile = `${outputDir}/chunk_${chunkIndex}.json`;
-                fs.writeFileSync(outputFile, JSON.stringify(chunks, null, 2));
-                keysToChunks.push(generateKey(chunkIndex));
-                chunkIndex++
-                console.info(`Created file: ${outputFile} with ${chunks.length} records.`);
-                chunks = [];
-            }
-        });
-
-        pipeline.on('end', () => {
-            if (chunks.length > 0) {
-                const outputFile = `${outputDir}/chunk_${chunkIndex}.json`;
-                fs.writeFileSync(outputFile, JSON.stringify(chunks, null, 2));
-                console.log(`Created file: ${outputFile} with ${chunks.length} records.`);
-                keysToChunks.push(generateKey(chunkIndex));
-            }
-            console.info(`Total records processed: ${totalRecords}`);
-            console.info(`Total chunks created: ${chunkIndex}`);
-
-            // Checks for duplicates
-            if (duplicates.length > 0) {
-                reject(
-                    new Error(`Duplicate records detected in the input JSON file. Duplicate file: ${duplicates.length}`)
-                );
-                return;
-            } else {
-                console.info('No duplicate records found.');
-            }
-
-            // Verify no data loss at the end of the process
-            const totalUniqueRecords = uniqueKey.size;
-            if (totalRecords !== totalUniqueRecords) {
-                reject(
-                    new Error(`Data check failed: Total records (${totalRecords} do not match unique records (${totalUniqueRecords})`)
-                );
-                return;
-            } else {
-                console.info('Data check passed: NO records lost');
-            }
-
-            // Resolve the promise with the list of chunk files
-            resolve(keysToChunks);
-
-        });
-
-        pipeline.on('error', (err) => {
-            console.error('Error while processing file', err);
-        })
-
-    })
-
-}
-// Upload data chunks to S3 bucket
-const uploadChunksDataToS3 = async (bucketName, key, filePath) => {
+// Rollback uploaded chunks files from S3 bucket
+async function rollBackUploadsFromS3(bucketName, fileKeys) {
     const s3Client = new S3Client({
         region: process.env.AWS_REGION || 'eu-west-1',
-        endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566',
+        endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_compliance_tech_recruitment_assignment:4566',
         forcePathStyle: true,
     });
-    try {
-        const fileContent = fs.readFileSync(filePath);
-        const s3details = {
-            Bucket: bucketName,
-            Key: key,
-            Body: fileContent,
-            ContentType: 'application/json'
-        }
-        await s3Client.send(new PutObjectCommand(s3details));
-        console.info(`File uploaded to S3: ${key}`);
 
+    try {
+        const deleteParams = {
+            Bucket: bucketName,
+            Delete: {
+                Objects: fileKeys?.map((key) => ({ Key: key }))
+            }
+        };
+        const result = await s3Client.send(new DeleteObjectsCommand(deleteParams));
+        console.log(`📂 Deleted files from S3 bucket: ${result.Deleted.map(f => f.Key).join(', ')}`);
     } catch (error) {
-        console.error(`Error uploading file to S3: ${key}`, error);
+        console.error("Error deleting chunk files:", error);
     }
 }
 
+const generateKey = (chunkNumber) => {
+    const projectName = "projectA";
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const dataType = "data/monthly";
+    return `${projectName}/${dataType}/${year}/${month}/chunk_${chunkNumber}.json`;
+};
 
 
+// Upload data chunks to S3 bucket
+const uploadChunksDataToS3 = async (bucketName, key, data) => {
+    const s3Client = new S3Client({
+        region: process.env.AWS_REGION || 'eu-west-1',
+        endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_compliance_tech_recruitment_assignment:4566',
+        forcePathStyle: true,
+    });
+
+    try {
+        const s3details = {
+            Bucket: bucketName,
+            Key: key,
+            Body: JSON.stringify(data, null, 2),
+            ContentType: 'application/json'
+        }
+        await s3Client.send(new PutObjectCommand(s3details));
+        console.info(`ℹ️ File uploaded to S3: ${key}`);
+    } catch (error) {
+        console.error(`❌ Error: upload file to S3: ${key}`, error);
+        throw error;
+    }
+}
 
 
