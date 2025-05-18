@@ -139,7 +139,7 @@ exports.handler = async (event) => {
         console.info(`✅ Successfully uploaded ${chunkNumber} chunks files to S3.`);
 
         return { keysToChunks };
-        
+
     } catch (error) {
         console.error("❌ Error processing file:", error);
         throw error;
@@ -148,7 +148,7 @@ exports.handler = async (event) => {
 
 
 // Rollback uploaded chunks files from S3 bucket
-async function rollBackUploadsFromS3(bucketName, fileKeys) {
+const rollBackUploadsFromS3 = async (bucketName, fileKeys) => {
     const s3Client = new S3Client({
         region: process.env.AWS_REGION || 'eu-west-1',
         endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_compliance_tech_recruitment_assignment:4566',
