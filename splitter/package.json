@@ -4,12 +4,15 @@
   "description": "This function is implemented by a candidate. It should split a large file to smaller chunks and optionally store them in S3 bucket.",
   "main": "index.js",
   "scripts": {
-    "test": "echo 'no tests for this module'"
+    "test": "jest splitJson.test.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.806.0",
     "stream-json": "^1.9.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }
