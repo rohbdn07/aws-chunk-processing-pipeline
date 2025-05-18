@@ -29,7 +29,6 @@ const CHUNK_SIZE = 3000;
  */
 const primaryTaskSplitLargeJsonIntoChunks = async () => {
     try {
-
         if (!fs.existsSync(OUTPUT_DIR)) {
             fs.mkdirSync(OUTPUT_DIR);
         }
@@ -57,7 +56,15 @@ const primaryTaskSplitLargeJsonIntoChunks = async () => {
     }
 }
 
-
+/**
+ * Writes a chunk of JSON data to a file with a generated unique name in the specified output directory.
+ *
+ * @param {string} outputDir - Directory where the chunk file will be written.
+ * @param {number} chunkNumber - The chunk index (used for file naming).
+ * @param {Array} data - The array of records to write.
+ * @returns {Promise<{fileName: string, writtenRecordsCount: number}>} The file name and number of records written.
+ * @throws {Error} If writing to the file fails.
+ */
 const writeChunkToFile = async (outputDir, chunkNumber, data) => {
     const fileName = generateKey(chunkNumber);
     const outputFilePath = path.join(outputDir, fileName);
@@ -75,15 +82,24 @@ const writeChunkToFile = async (outputDir, chunkNumber, data) => {
 };
 
 
-
-// Split large Json data into multiple chunks
+/**
+ * Reads a large JSON array from a file as a stream, splits it into smaller chunks,
+ * and writes each chunk to a separate file in the specified output directory.
+ * Tracks the total number of records processed and ensures all data is chunked and written.
+ *
+ * @param {string} data - Path to the input JSON file.
+ * @param {string} outputDir - Directory where chunk files will be written.
+ * @param {number} chunkSize - Number of records per chunk file.
+ * @returns {Promise<{totalOriginalRecords: number, totalChunksRecords: number, keysToChunks: string[]}>}
+ *          An object containing the total records processed, total records written, and the list of chunk file names.
+ * @throws {Error} If an error occurs during reading, chunking, or writing.
+ */
 const splitLargeJsonData = async (data, outputDir, chunkSize) => {
     let chunks = [];
     let totalOriginalRecords = 0;
     const keysToChunks = [];
     let chunkNumber = 1;
     let chunkTotalRecords = [];
-
 
     const writable = new Writable({
         objectMode: true,
@@ -140,19 +156,22 @@ const splitLargeJsonData = async (data, outputDir, chunkSize) => {
                 } else {
                     console.info(`✅ Successfully processed ${totalOriginalRecords} records into ${chunkNumber} files.`);
                     resolve()
-
                 }
             }
         );
     });
 
-    // Total counts from multiple chunks records 
     const totalChunksRecords = chunkTotalRecords.reduce((accumulator, currentValue) => accumulator + currentValue, 0);
-
     return { totalOriginalRecords, totalChunksRecords, keysToChunks };
 }
 
 
+/**
+ * Generates a unique chunk file name based on the project, data type, current year and month, and chunk number.
+ *
+ * @param {number} chunkNumber - The chunk index (starting from 1).
+ * @returns {string} The generated file name, e.g., "projectA-data-monthly-2024-06-chunk_1.json".
+ */
 const generateKey = (chunkNumber) => {
     const projectName = "projectA";
     const date = new Date();
@@ -162,6 +181,13 @@ const generateKey = (chunkNumber) => {
     return `${projectName}-${dataType}-${year}-${month}-chunk_${chunkNumber}.json`;
 };
 
-// module.exports = { primaryTaskSplitLargeJsonIntoChunks };
+module.exports = { primaryTaskSplitLargeJsonIntoChunks, splitLargeJsonData, writeChunkToFile, generateKey};
 
+
+
+/**
+ * NOTE TO DEVELOPERS:
+ * To run this script directly, uncomment the function call below.
+ * This will execute the primaryTaskSplitLargeJsonIntoChunks function.
+ */
 // primaryTaskSplitLargeJsonIntoChunks()
