@@ -5,9 +5,10 @@ const JSONStream = require('JSONStream');
 /**
  * NOTE TO DEVELOPERS:
  *
- * The Step Function (optional-task.asl.json) now sends only a single key in the keysToChunks array.
- * You can simplify this handler by removing the for-loop and processing just the first key in keysToChunks.
- * This change improves clarity and efficiency since only one chunk key will be provided per invocation.
+ * The Step Function (optional-task.asl.json) now provides a single chunk key in the event,
+ * rather than an array of keys (keysToChunks). To simplify and optimize this handler,
+ * remove the for-loop and process the event as a single chunk key (e.g., event = key).
+ * This change streamlines the logic and ensures the handler matches the new event structure.
  */
 exports.handler = async (event) => {
     console.info(`Received splitter output: ${JSON.stringify(event)}`);
@@ -43,6 +44,13 @@ exports.handler = async (event) => {
     return { validatedReportChunkSizes };
 };
 
+/**
+ * NOTE TO DEVELOPERS:
+ *
+ * The Step Function (optional-task.asl.json) now provides a single chunk key in the event,
+ * rather than an array of keys (keysToChunks). To simplify and optimize this validateInputEvent,
+ * remove checking event.keysToChunks and for its length. Only checking for the event(key) is fine here.
+ */
 const validateInputEvent = (event) => {
     if (!event || !event.keysToChunks || !event.keysToChunks.length) {
         throw new Error('Invalid input event. Splitter output must contain keysToChunks array');
