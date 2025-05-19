@@ -188,6 +188,10 @@ module.exports = { primaryTaskSplitLargeJsonIntoChunks, splitLargeJsonData, writ
 /**
  * NOTE TO DEVELOPERS:
  * To run this script directly, uncomment the function call below.
- * This will execute the primaryTaskSplitLargeJsonIntoChunks function.
+ * This will execute the primaryTaskSplitLargeJsonIntoChunks function and perform the splitting operation.
+ *
+ * IMPORTANT:
+ * - If you want to run unit tests for this file, make sure the function call below remains commented out.
+ *   This prevents the script from executing the split operation automatically during testing.
  */
 // primaryTaskSplitLargeJsonIntoChunks()

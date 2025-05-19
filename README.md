@@ -149,3 +149,23 @@ $ docker compose run --rm aws-cli --endpoint-url=http://localstack:4566 lambda u
 > Instead, it reads and processes the JSON data in a memory-efficient way, splitting and writing each chunk as it goes.  
 > This approach ensures scalability and stability even with very large input files, as memory usage remains low and predictable regardless of file size.
 
+---
+
+## Running the Tests
+
+Unit tests are provided for the `primaryTasksplitLargeJson.js` to ensure correctness and reliability.
+
+To run the tests:
+
+1. Open a terminal and navigate to the `splitter` directory:
+    ```bash
+    cd splitter
+    ```
+
+2. Run the test suite using npm:
+    ```bash
+    npm run test
+    ```
+
+This will execute all test cases and display the results in your terminal.
+
