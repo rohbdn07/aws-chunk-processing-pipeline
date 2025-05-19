@@ -125,6 +125,75 @@ If you choose a programming language different from the one used in the dummy `s
 $ docker compose run --rm aws-cli --endpoint-url=http://localstack:4566 lambda update-function-code --function-name splitter --region eu-west-1 --zip-file fileb:///build/splitter_function.zip
 ```
 
+
+## My solution
+
+My solution is implemented in Node.js and is designed to efficiently split a large JSON file into multiple smaller files, each containing up to 3000 records, without loading the entire file into memory. The approach uses streaming and chunked processing to ensure scalability for very large files.
+
+**Note:**  
+In order to make the code easy to follow, I have included descriptive comments above most functions. 
+
+For reliable processing of large files, increase the Lambda function (splitter) timeout from the default (3 seconds) to at least 7 seconds, or higher if needed, to avoid premature termination. Also, ensure that you run AWS services such as: lambda functions, s3 bucket, step function in same region (eu-west-1).
+
+In `optional-task.asl.json`, I updated the Step Function workflow to use a `Map` state for iterating over the `keysToChunks` array. This allows the sender Lambda function to be invoked once for each chunk key, so each chunk is processed individually. The `Map` state takes the array of chunk keys and triggers the sender Lambda for each key. This change ensures that each chunk is handled independently and efficiently, as required by the assignment.
+
+Use the following command to create an updated Step Function that includes a Map state:
+
+```
+aws --endpoint-url=http://localhost:4566 stepfunctions create-state-machine \
+    --name "SplitAndSendReportByChunks" \
+    --definition '{
+        "Comment": "Split and send report by chunks",
+        "StartAt": "SplitLargeReport",
+            "States": {
+            "SplitLargeReport": {
+                "Type": "Task",
+                "Resource": "arn:aws:lambda:eu-west-1:000000000000:function:splitter",
+                "Next": "SendReportByChunks"
+            },
+            "SendReportByChunks": {
+                "Type": "Map",
+                "ItemsPath": "$.keysToChunks",
+                "Iterator": {
+                    "StartAt": "ProcessChunk",
+                    "States": {
+                        "ProcessChunk": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:lambda:eu-west-1:000000000000:function:sender",
+                            "End": true
+                        }
+                    } 
+                },
+                "End": true 
+            }
+        }
+    }' \
+    --role-arn "arn:aws:iam::000000000000:role/stepfunctions-role" \
+    --region eu-west-1
+```
+
+**Key points of my implementation:**
+
+- **Streaming:**  
+  The splitter reads the input JSON file as a stream using the `stream-json` library, which allows for processing large files in a memory-efficient way.
+
+- **Chunking:**  
+  As records are read from the stream, they are collected into an array. Once the array reaches the specified chunk size (3000 records), it is written to a new output file (or S3 object in the Lambda version).
+
+- **File Naming:**  
+  Each chunk file is named using a consistent pattern that includes the project name, data type, year, month, and chunk number, ensuring uniqueness and traceability.
+
+- **Data Integrity:**  
+  After splitting, the solution verifies that the total number of records written matches the original count. If any data loss is detected, all chunk files are deleted (or S3 objects are rolled back) to maintain integrity.
+
+- **AWS Lambda Support:**  
+  For the optional task, the same logic is adapted to run as an AWS Lambda function, reading from and writing to S3, and supporting Step Functions integration.
+
+- **Unit Testing:**  
+  Unit tests are provided for the core splitting logic to ensure correctness and reliability.
+
+This approach ensures that the solution is robust, scalable, and suitable for both local and cloud-based (AWS Lambda) environments.
+
 ## Optional design questions
 
 1. Are the instructions for setting up the assignment clear to you? If not, how would you improve them?
