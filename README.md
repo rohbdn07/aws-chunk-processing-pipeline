@@ -133,7 +133,7 @@ My solution is implemented in Node.js and is designed to efficiently split a lar
 **Note:**  
 In order to make the code easy to follow, I have included descriptive comments above most functions. 
 
-For reliable processing of large files, increase the Lambda function (splitter) timeout from the default (3 seconds) to at least 7 seconds, or higher if needed, to avoid premature termination. Also, ensure that you run AWS services such as: lambda functions, s3 bucket, step function in same region (eu-west-1).
+For reliable processing of large files, increase the Lambda functions timeout from the default (3 seconds) to at least 7 seconds, or higher if needed, to avoid premature termination. Also, ensure that you run AWS services such as: lambda functions, s3 bucket, step function in same region (i.e. eu-west-1).
 
 In `optional-task.asl.json`, I updated the Step Function workflow to use a `Map` state for iterating over the `keysToChunks` array. This allows the sender Lambda function to be invoked once for each chunk key, so each chunk is processed individually. The `Map` state takes the array of chunk keys and triggers the sender Lambda for each key. This change ensures that each chunk is handled independently and efficiently, as required by the assignment.
 
