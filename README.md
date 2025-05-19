@@ -128,4 +128,24 @@ $ docker compose run --rm aws-cli --endpoint-url=http://localstack:4566 lambda u
 ## Optional design questions
 
 1. Are the instructions for setting up the assignment clear to you? If not, how would you improve them?
+
+> **Answer:**  
+> The instructions are generally clear and well-structured, especially for someone familiar with Docker, AWS CLI, and serverless workflows. The step-by-step setup and packaging commands are helpful.  
+> However, I encountered issues when running the `./start-localstack.sh` script: it was unable to create the Lambda functions, invoke them, and create the Step Function as expected. These steps had to be performed manually.  
+> After the `put-object` command for the S3 bucket, the script stops or hangs. This is likely because a previous command (such as `aws s3api put-object`) is waiting for input or has failed, but the script does not have `set -e` to exit on error, nor does it print errors by default.  
+> Additionally, if Docker or LocalStack is not fully ready, or if the AWS CLI cannot connect to LocalStack, the script may hang or fail silently at that point.
+
+> **Suggestions for improvement:**
+> - Add `set -e` at the top of the `start-localstack.sh` script to ensure the script exits immediately if any command fails, making errors more visible and preventing the script from hanging unexpectedly.
+> - Explicitly mention where to find or set the AWS credentials for LocalStack, as some users may not have them configured.
+> - Clarify the expected directory structure after running the packaging commands (e.g., where the ZIP files will appear).
+
+
 2. The size of the JSON file in the assignment is not big at all. Do you think your splitting solution can handle a much larger file size (e.g. 500MB)?
+
+> **Answer:**  
+> Yes, my splitting solution is designed to handle very large files, including those of 500MB or more.  
+> The implementation uses streaming and chunked processing, so it does not load the entire file into memory at once.  
+> Instead, it reads and processes the JSON data in a memory-efficient way, splitting and writing each chunk as it goes.  
+> This approach ensures scalability and stability even with very large input files, as memory usage remains low and predictable regardless of file size.
+
