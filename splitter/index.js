@@ -9,6 +9,9 @@ const { Writable } = require('stream');
  * AWS Lambda handler function to process a large JSON file from S3, split it into chunks,
  * and upload the chunks back to S3. Ensures data integrity by rolling back uploads if any data loss is detected.
  *
+ * NOTE: For reliable processing of large files, increase the Lambda function timeout from the default (3 seconds)
+ * to at least 8 seconds, or higher if needed, to avoid premature termination.
+ *
  * Workflow:
  * 1. Reads a large JSON file from an S3 bucket.
  * 2. Streams and splits the JSON array into smaller chunks based on a specified chunk size.
@@ -147,7 +150,7 @@ exports.handler = async (event) => {
 };
 
 
-// Rollback uploaded chunks files from S3 bucket
+// Rollback uploaded chunks from S3 bucket
 const rollBackUploadsFromS3 = async (bucketName, fileKeys) => {
     const s3Client = new S3Client({
         region: process.env.AWS_REGION || 'eu-west-1',
