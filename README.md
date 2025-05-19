@@ -201,14 +201,12 @@ This approach ensures that the solution is robust, scalable, and suitable for bo
 > **Answer:**  
 > The instructions are generally clear and well-structured, especially for someone familiar with Docker, AWS CLI, and serverless workflows. The step-by-step setup and packaging commands are helpful.  
 > However, I encountered issues when running the `./start-localstack.sh` script: it was unable to create the Lambda functions, invoke them, and create the Step Function as expected. These steps had to be performed manually.  
-> After the `put-object` command for the S3 bucket, the script stops or hangs. This is likely because a previous command (such as `aws s3api put-object`) is waiting for input or has failed, but the script does not have `set -e` to exit on error, nor does it print errors by default.  
-> Additionally, if Docker or LocalStack is not fully ready, or if the AWS CLI cannot connect to LocalStack, the script may hang or fail silently at that point.
+> After the `put-object` command for the S3 bucket, the script stops or hangs. This is likely because a previous command (such as `aws s3api put-object`) is taking time to upload.
 
 > **Suggestions for improvement:**
-> - Add `set -e` at the top of the `start-localstack.sh` script to ensure the script exits immediately if any command fails, making errors more visible and preventing the script from hanging unexpectedly.
+> - To make the `./start-localstack.sh`  script more reliable, I suggest adding error handling if any AWS service creation fails, along with checks to confirm whether the services were created successfully.
 > - Explicitly mention where to find or set the AWS credentials for LocalStack, as some users may not have them configured.
 > - Clarify the expected directory structure after running the packaging commands (e.g., where the ZIP files will appear).
-
 
 2. The size of the JSON file in the assignment is not big at all. Do you think your splitting solution can handle a much larger file size (e.g. 500MB)?
 
