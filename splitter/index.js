@@ -150,7 +150,14 @@ exports.handler = async (event) => {
 };
 
 
-// Rollback uploaded chunks from S3 bucket
+/**
+ * Deletes a list of chunk files from the specified S3 bucket (rollback) if data integrity fails.
+ *
+ * @param {string} bucketName - The name of the S3 bucket.
+ * @param {string[]} fileKeys - Array of S3 object keys to delete.
+ * @returns {Promise<void>}
+ * @throws {Error} If the deletion from S3 fails.
+ */
 const rollBackUploadsFromS3 = async (bucketName, fileKeys) => {
     const s3Client = new S3Client({
         region: process.env.AWS_REGION || 'eu-west-1',
@@ -172,7 +179,13 @@ const rollBackUploadsFromS3 = async (bucketName, fileKeys) => {
     }
 }
 
-// Generate chunk file name
+/**
+ * Generates a unique S3 chunk file key based on project name, data type, current year and month, and chunk number.
+ * The format is: "projectA/data/monthly/YYYY/MM/chunk_{chunkNumber}.json"
+ *
+ * @param {number} chunkNumber - The chunk index (starting from 1).
+ * @returns {string} The generated S3 object key for the chunk file.
+ */
 const generateKey = (chunkNumber) => {
     const projectName = "projectA";
     const date = new Date();
