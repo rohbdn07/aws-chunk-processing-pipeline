@@ -10,7 +10,7 @@ const { Writable } = require('stream');
  * and upload the chunks back to S3. Ensures data integrity by rolling back uploads if any data loss is detected.
  *
  * NOTE: For reliable processing of large files, increase the Lambda function timeout from the default (3 seconds)
- * to at least 8 seconds, or higher if needed, to avoid premature termination.
+ * to at least 7 seconds, or higher if needed, to avoid premature termination. Also, ensure that you run lambda services in same region (eu-west-1).
  *
  * Workflow:
  * 1. Reads a large JSON file from an S3 bucket.

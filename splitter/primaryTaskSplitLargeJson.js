@@ -137,7 +137,7 @@ const splitLargeJsonData = async (data, outputDir, chunkSize) => {
                     callback();
                 }
             } catch (error) {
-                console.error("Error in uploading final chunk:", error);
+                console.error("Error while uploading final chunk:", error);
                 callback(error);
             }
         }
@@ -187,11 +187,11 @@ module.exports = { primaryTaskSplitLargeJsonIntoChunks, splitLargeJsonData, writ
 
 /**
  * NOTE TO DEVELOPERS:
- * To run this script directly, uncomment the function call below.
+ * To run this script directly, uncomment the function call below and comment-out module.exports line above.
  * This will execute the primaryTaskSplitLargeJsonIntoChunks function and perform the splitting operation.
  *
  * IMPORTANT:
- * - If you want to run unit tests for this file, make sure the function call below remains commented out.
+ * - If you want to run unit tests for this file, make sure the function call below remains commented out and above module.exports line is uncomment.
  *   This prevents the script from executing the split operation automatically during testing.
  */
 // primaryTaskSplitLargeJsonIntoChunks()
