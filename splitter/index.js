@@ -83,8 +83,11 @@ exports.handler = async (event) => {
         let chunkNumber = 1;
         let chunks = [];
         let uploadPromises = [];
-        let totalOriginalRecords = 0;
+        let validRecordCount = 0;
         let uploadedRecordCount = 0;
+        let invalidRecordCount = 0;
+        let duplicateRecordCount = 0;
+        const seenPlayerIds = new Set();
 
         // Writable stream to collect and upload JSON chunks to S3.
         const writable = new Writable({
@@ -92,8 +95,19 @@ exports.handler = async (event) => {
             async write({ value }, _, callback) {
                 try {
                     if (value) {
+                        if (!value.player_id) {
+                            invalidRecordCount++;
+                            return callback();
+                        }
+
+                        if (seenPlayerIds.has(value.player_id)) {
+                            duplicateRecordCount++;
+                            return callback();
+                        }
+
+                        seenPlayerIds.add(value.player_id);
                         chunks.push(value);
-                        totalOriginalRecords++
+                        validRecordCount++
 
                         if (chunks.length == CHUNK_SIZE) {
                             const chunkData = [...chunks];
@@ -140,8 +154,6 @@ exports.handler = async (event) => {
                     if (failedUploads.length > 0) {
                         throw new Error(`${failedUploads.length} chunk upload task(s) failed`);
                     }
-
-                    // uploadPromises = []
                     uploadPromises.length = 0;
                     console.info(`✅ All chunks uploaded. Total chunks: ${keysToChunks.length}`);
                     callback();
@@ -166,7 +178,7 @@ exports.handler = async (event) => {
         await verifyUploadIntegrity({
             bucketName,
             uploadedChunkKeys,
-            totalOriginalRecords,
+            validRecordCount,
             uploadedRecordCount,
         });
 
@@ -174,7 +186,12 @@ exports.handler = async (event) => {
 
         await sendNotification(keysToChunks.length);
 
-        return { keysToChunks };
+        return {
+            keysToChunks,
+            validRecordCount,
+            invalidRecordCount,
+            duplicateRecordCount,
+        };
     } catch (error) {
         console.error("❌ Error processing file:", error);
         try {
@@ -223,17 +240,17 @@ const sendSQS = async (bucketName, key) => {
 }
 
 
-const verifyUploadIntegrity = async ({ bucketName, uploadedChunkKeys, totalOriginalRecords, uploadedRecordCount }) => {
-    if (totalOriginalRecords !== uploadedRecordCount) {
+const verifyUploadIntegrity = async ({ bucketName, uploadedChunkKeys, validRecordCount, uploadedRecordCount }) => {
+    if (validRecordCount !== uploadedRecordCount) {
         await rollBackUploadsFromS3(bucketName, uploadedChunkKeys);
         uploadedChunkKeys.length = 0;
         console.info(
-            `ℹ️ Data integrity check failed (data lost): Original records (${totalOriginalRecords}) do not match uploaded records (${uploadedRecordCount}).\nℹ️ ROLLBACK: All chunk files have been deleted due to data integrity failure.`
+            `ℹ️ Data integrity check failed (data lost): Valid records (${validRecordCount}) do not match uploaded records (${uploadedRecordCount}).\nℹ️ ROLLBACK: All chunk files have been deleted due to data integrity failure.`
         );
-        throw new Error(`Data check failed: Total records (${totalOriginalRecords}) do not match uploaded records (${uploadedRecordCount})`);
+        throw new Error(`Data check failed: Valid records (${validRecordCount}) do not match uploaded records (${uploadedRecordCount})`);
     }
 
-    console.info('ℹ️ Data check passed: No records lost');
+    console.info('ℹ️ Data check passed: No valid records lost');
 }
 
 
