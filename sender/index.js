@@ -3,73 +3,84 @@ const JSONStream = require('JSONStream');
 
 
 /**
- * NOTE TO DEVELOPERS:
+ * AWS Lambda handler that validates a single report chunk created by the splitter.
  *
- * The Step Function (optional-task.asl.json) now provides a single chunk key in the event,
- * rather than an array of keys (keysToChunks). To simplify and optimize this handler,
- * remove the for-loop and process the event as a single chunk key (e.g., event = key).
- * This change streamlines the logic and ensures the handler matches the new event structure.
+ * The Step Function Map state invokes this handler once per chunk key. For each chunk,
+ * the handler downloads the JSON array from S3, verifies that it contains between 1 and
+ * 3000 player records, and checks that every record has a player_id.
+ *
+ * @param {string} event - S3 object key for a single report chunk.
+ * @returns {Promise<{validatedReportChunkSizes: Array<{key: string, size: number}>}>}
  */
 exports.handler = async (event) => {
-    console.info(`Received splitter output: ${JSON.stringify(event)}`);
-    validateInputEvent(event);
-    const s3Client = new S3Client();
-    const bucketName = process.env.BUCKET_NAME;
+    const key = validateInputEvent(event);
+    const bucketName = process.env.BUCKET_NAME || 'report-store';
     const validatedReportChunkSizes = [];
-    for (const key of event.keysToChunks) {
-        try {
-            const params = {
-                Bucket: bucketName,
-                Key: key,
-                ResponseContentType: 'application/json',
-            };
-            const resp = await s3Client.send(new GetObjectCommand(params));
-            console.info(`Successfully retrieved data from S3 for key: ${key}`);
-            const chunkSize = await countPlayers(resp.Body);
-            if (!chunkSize) {
-                throw new Error(`Invalid data retrieved from S3 for key: ${key} - no player records found`);
-            }
-            if (chunkSize > 3000) {
-                throw new Error(`Invalid data retrieved from S3 for key: ${key}. Expected up to 3000 records, got ${reportChunk.length}`);
-            }
-            validatedReportChunkSizes.push({
-                key,
-                size: chunkSize,
-            });
-        } catch (error) {
-            console.error(`Failed to validate data from S3 for key: ${key}`, error);
-            throw error;
+
+    console.info(`Received report chunk key: ${key}`);
+
+    try {
+        const params = {
+            Bucket: bucketName,
+            Key: key,
+            ResponseContentType: 'application/json',
+        };
+        const resp = await s3Client.send(new GetObjectCommand(params));
+        console.info(`Successfully retrieved data from S3 for key: ${key}`);
+
+        const chunkSize = await countValidPlayers(resp.Body);
+        if (chunkSize === 0) {
+            throw new Error(`Invalid data retrieved from S3 for key: ${key} - no player records found`);
         }
+        if (chunkSize > 3000) {
+            throw new Error(`Invalid data retrieved from S3 for key: ${key}. Expected up to 3000 records, got ${chunkSize}`);
+        }
+
+        validatedReportChunkSizes.push({
+            key,
+            size: chunkSize,
+        });
+    } catch (error) {
+        console.error(`Failed to validate data from S3 for key: ${key}`, error);
+        throw error;
     }
+
     return { validatedReportChunkSizes };
 };
 
+const s3Client = new S3Client({
+    region: process.env.AWS_REGION || 'eu-west-1',
+    endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_compliance_tech_recruitment_assignment:4566',
+    forcePathStyle: true,
+});
+
 /**
- * NOTE TO DEVELOPERS:
+ * Validates that the sender received a single chunk key from the Step Function Map state.
  *
- * The Step Function (optional-task.asl.json) now provides a single chunk key in the event,
- * rather than an array of keys (keysToChunks). To simplify and optimize this validateInputEvent,
- * remove checking event.keysToChunks and for its length. Only checking for the event(key) is fine here.
+ * @param {string} event - S3 object key for a single report chunk.
+ * @returns {string} The validated chunk key.
  */
 const validateInputEvent = (event) => {
-    if (!event || !event.keysToChunks || !event.keysToChunks.length) {
-        throw new Error('Invalid input event. Splitter output must contain keysToChunks array');
+    if (!event || typeof event !== 'string') {
+        throw new Error('Invalid input event. Sender expects a single S3 chunk key string');
     }
+
+    return event;
 };
 
-const countPlayers = async (stream) => {
-    let nbPlayers = 0;
+const countValidPlayers = async (stream) => {
+    let count = 0;
     return new Promise((resolve, reject) => {
         stream
-            .pipe(JSONStream.parse('*.player_id'))
-            .on('data', (playerId) => {
-                if (playerId) {
-                    nbPlayers++;
+            .pipe(JSONStream.parse('*'))
+            .on('data', (player) => {
+                if (!player?.player_id) {
+                    reject(new Error('Invalid chunk record found without player_id'));
+                    return;
                 }
+                count++;
             })
-            .on('end', () => resolve(nbPlayers))
-            .on('error', (err) => {
-                reject(err);
-            });
+            .on('end', () => resolve(count))
+            .on('error', reject);
     });
 };
