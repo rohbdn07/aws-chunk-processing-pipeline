@@ -37,13 +37,16 @@ const sqsClient = new SQSClient({
  * 1. Reads a large JSON file from an S3 bucket.
  * 2. Streams and splits the JSON array into smaller chunks based on a specified chunk size.
  * 3. Generates unique S3 keys for each chunk.
- * 4. Uploads each chunk to the specified S3 bucket, batching uploads for efficiency.
- * 5. If the total number of records uploaded does not match the original, deletes all uploaded chunks (rollback).
+ * 4. Uploads each chunk to the specified S3 bucket with bounded concurrency.
+ * 5. Sends an SQS message for each successfully uploaded chunk.
+ * 6. If processing fails or uploaded record counts do not match the original, deletes uploaded chunks (rollback).
  *
  * Environment Variables:
  * - BUCKET_NAME: The name of the S3 bucket where the chunks will be uploaded.
  * - AWS_REGION: The AWS region.
  * - LOCALSTACK_ENDPOINT: The LocalStack endpoint for local AWS emulation.
+ * - SQS_URL: The SQS queue URL that receives uploaded chunk messages.
+ * - SNS_TOPIC_ARN: The SNS topic ARN for completion notifications.
  *
  * @param {Object} event - Lambda event object containing at least the S3 key and optionally the bucket name.
  * @param {string} event.key - The S3 key of the input JSON file.
@@ -56,10 +59,14 @@ exports.handler = async (event) => {
     const CHUNK_SIZE = 3000;
     const CONCURRENCY_LIMIT = 5;
     const limit = pLimit(CONCURRENCY_LIMIT);
-    const key = event.key;
-    const bucketName = event.bucketName || event.bucket || process.env.BUCKET_NAME || 'report-store'
+    const keysToChunks = [];
+    const uploadedChunkKeys = [];
+    let bucketName;
 
     try {
+        const key = event?.key;
+        bucketName = event?.bucketName || event?.bucket || process.env.BUCKET_NAME || 'report-store'
+
         if (!bucketName || !key) {
             throw new Error('Missing required parameters: bucketName or key');
         }
@@ -73,7 +80,6 @@ exports.handler = async (event) => {
         const largeJsonData = resp.Body;
         console.info(`Successfully retrieved data from S3 for key: ${key}`);
 
-        const keysToChunks = [];
         let chunkNumber = 1;
         let chunks = [];
         let uploadPromises = [];
@@ -95,6 +101,7 @@ exports.handler = async (event) => {
                             keysToChunks.push(chunkKey);
                             const uploadPromise = limit(async () => {
                                 await uploadChunksDataToS3(bucketName, chunkKey, chunkData);
+                                uploadedChunkKeys.push(chunkKey);
                                 uploadedRecordCount += chunkData.length;
                                 console.info(`✅ Uploaded to S3: ${chunkKey}`);
                                 await sendSQS(bucketName, chunkKey);
@@ -120,14 +127,20 @@ exports.handler = async (event) => {
 
                         const uploadPromise = limit(async () => {
                             await uploadChunksDataToS3(bucketName, chunkKey, chunkData);
+                            uploadedChunkKeys.push(chunkKey);
                             uploadedRecordCount += chunkData.length;
                             console.info(`✅ Uploaded (final) to S3: ${chunkKey}`);
                             await sendSQS(bucketName, chunkKey);
                         });
                         uploadPromises.push(uploadPromise);
                     }
-                    // Wait for all remaining uploads
-                    await Promise.all(uploadPromises);
+                    // Wait for all uploads to settle before deciding whether rollback is needed.
+                    const uploadResults = await Promise.allSettled(uploadPromises);
+                    const failedUploads = uploadResults.filter(({ status }) => status === 'rejected');
+                    if (failedUploads.length > 0) {
+                        throw new Error(`${failedUploads.length} chunk upload task(s) failed`);
+                    }
+
                     // uploadPromises = []
                     uploadPromises.length = 0;
                     console.info(`✅ All chunks uploaded. Total chunks: ${keysToChunks.length}`);
@@ -152,7 +165,7 @@ exports.handler = async (event) => {
 
         await verifyUploadIntegrity({
             bucketName,
-            keysToChunks,
+            uploadedChunkKeys,
             totalOriginalRecords,
             uploadedRecordCount,
         });
@@ -164,6 +177,11 @@ exports.handler = async (event) => {
         return { keysToChunks };
     } catch (error) {
         console.error("❌ Error processing file:", error);
+        try {
+            await rollBackUploadsFromS3(bucketName, uploadedChunkKeys);
+        } catch (rollbackError) {
+            console.error("❌ Rollback failed after processing error:", rollbackError);
+        }
         throw new Error(`❌ Error processing file:, ${error}`);
     }
 };
@@ -181,7 +199,6 @@ const sendNotification = async (chunkNumber) => {
         console.log('✅ Notification sent');
     } catch (error) {
         console.error("❌ Error sending Notification:", error);
-        throw new Error(`❌ Error sending Notification:, ${error}`);
     }
 }
 
@@ -206,9 +223,10 @@ const sendSQS = async (bucketName, key) => {
 }
 
 
-const verifyUploadIntegrity = async ({ bucketName, keysToChunks, totalOriginalRecords, uploadedRecordCount }) => {
+const verifyUploadIntegrity = async ({ bucketName, uploadedChunkKeys, totalOriginalRecords, uploadedRecordCount }) => {
     if (totalOriginalRecords !== uploadedRecordCount) {
-        await rollBackUploadsFromS3(bucketName, keysToChunks);
+        await rollBackUploadsFromS3(bucketName, uploadedChunkKeys);
+        uploadedChunkKeys.length = 0;
         console.info(
             `ℹ️ Data integrity check failed (data lost): Original records (${totalOriginalRecords}) do not match uploaded records (${uploadedRecordCount}).\nℹ️ ROLLBACK: All chunk files have been deleted due to data integrity failure.`
         );
