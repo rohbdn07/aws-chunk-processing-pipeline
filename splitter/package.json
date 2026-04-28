@@ -1,15 +1,21 @@
 {
   "name": "splitter",
   "version": "1.0.0",
-  "description": "This function is implemented by a candidate. It should split a large file to smaller chunks and optionally store them in S3 bucket.",
+  "description": "It should split a large file to smaller chunks and store them in S3 bucket.",
   "main": "index.js",
   "scripts": {
-    "test": "jest splitJson.test.js"
+    "test": "jest index.test.js",
+    "test:all": "jest index.test.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.806.0",
+    "@aws-sdk/client-sns": "^3.823.0",
+    "@aws-sdk/client-sqs": "^3.831.0",
+    "axios": "^1.9.0",
+    "express": "^5.1.0",
+    "p-limit": "^3.1.0",
     "stream-json": "^1.9.1"
   },
   "devDependencies": {
