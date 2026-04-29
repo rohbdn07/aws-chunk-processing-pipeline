@@ -1,43 +1,67 @@
 services:
-  packager:
-    build: ./packager
-    volumes:
-      - ./:/src
-
   aws-cli:
     image: amazon/aws-cli
     environment:
-      - AWS_DEFAULT_REGION=eu-west-1
-      - AWS_ACCESS_KEY_ID=key
-      - AWS_SECRET_ACCESS_KEY=secret
+      - AWS_DEFAULT_REGION=${AWS_REGION:-eu-west-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY:-key}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_KEY:-secret}
     networks:
-      - compliance_tech_recruitment_assignment
+      - data-pipeline
     volumes:
       # share lambda source code with localstack
       - ./build:/build
 
   localstack:
     image: localstack/localstack:latest
-    container_name: localstack_compliance_tech_recruitment_assignment
+    container_name: localstack_data_pipeline
     ports:
       - "4566:4566" # LocalStack edge port
       - '8055:8080'
     environment:
-      - SERVICES=s3,lambda,events,stepfunctions
+      - SERVICES=s3,lambda,events,stepfunctions,iam,sts,cloudwatch,logs,sns,sqs
       - DEBUG=1
-      - LAMBDA_EXECUTOR=docker
-      # set AWS configrations for localstack
-      - AWS_DEFAULT_REGION=eu-west-1
-      - AWS_ACCESS_KEY_ID=key
-      - AWS_SECRET_ACCESS_KEY=secret
+      - DISABLE_EVENTS=1                  # Disable automatic event retriggering
+      - AWS_DEFAULT_REGION=${AWS_REGION:-eu-west-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY:-key}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_KEY:-secret}
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN}
+      # - LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT=60
     networks:
-      - compliance_tech_recruitment_assignment
+      - data-pipeline
     volumes:
       # share lambda source code with localstack
       - ./build:/etc/localstack/init/build
       # localstack needs docker to run lambdas
       - "/var/run/docker.sock:/var/run/docker.sock"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  
+  terraform:
+    image: hashicorp/terraform:latest
+    volumes:
+      - ./terraform:/workspace
+      - ./terraform/.terraform:/workspace/.terraform # Cache plugins/modules
+      - ./terraform/terraform.tfstate:/workspace/terraform.tfstate # Persist state
+      - ./build:/build
+    working_dir: /workspace
+    depends_on:
+      localstack:
+        condition: service_healthy
+    tty: true
+    networks:
+      - data-pipeline
+    environment:
+      - AWS_REGION=${AWS_REGION:-eu-west-1}
+      - AWS_ACCESS_KEY=${AWS_ACCESS_KEY:-key}
+      - AWS_SECRET_KEY=${AWS_SECRET_KEY:-secret}
+    # entrypoint: ["sh", "-c", "terraform init && terraform apply -auto-approve"]
 
 networks:
-  compliance_tech_recruitment_assignment:
+  data-pipeline:
     driver: bridge
