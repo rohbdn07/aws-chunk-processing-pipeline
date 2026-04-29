@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="1120" viewBox="0 0 1120 1120" role="img" aria-labelledby="title desc">
+  <title id="title">Splitter algorithm flow</title>
+  <desc id="desc">Flowchart showing how the splitter validates player records, skips invalid and duplicate records, chunks valid records, uploads chunks to S3, sends SQS messages, verifies counts, and returns results.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#344054"/>
+    </marker>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .title { fill: #101828; font: 700 30px Arial, sans-serif; }
+      .subtitle { fill: #475467; font: 16px Arial, sans-serif; }
+      .box { fill: #ffffff; stroke: #98a2b3; stroke-width: 2; rx: 10; }
+      .decision { fill: #fff7e6; stroke: #f79009; stroke-width: 2; }
+      .success { fill: #ecfdf3; stroke: #12b76a; stroke-width: 2; rx: 10; }
+      .skip { fill: #fff1f3; stroke: #f04438; stroke-width: 2; rx: 10; }
+      .io { fill: #eff8ff; stroke: #2e90fa; stroke-width: 2; rx: 10; }
+      .text { fill: #101828; font: 15px Arial, sans-serif; }
+      .small { fill: #475467; font: 13px Arial, sans-serif; }
+      .label { fill: #344054; font: 700 13px Arial, sans-serif; }
+      .arrow { stroke: #344054; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="1120"/>
+  <text class="title" x="560" y="48" text-anchor="middle">Splitter Algorithm Flow</text>
+  <text class="subtitle" x="560" y="76" text-anchor="middle">Valid unique players are chunked and uploaded. Invalid and duplicate records are skipped and counted.</text>
+
+  <rect class="io" x="390" y="110" width="340" height="68"/>
+  <text class="text" x="560" y="139" text-anchor="middle">Receive Lambda event</text>
+  <text class="small" x="560" y="160" text-anchor="middle">bucket or bucketName + source key</text>
+
+  <path class="arrow" d="M560 178 L560 220"/>
+  <rect class="io" x="390" y="220" width="340" height="68"/>
+  <text class="text" x="560" y="249" text-anchor="middle">Read source JSON from S3</text>
+  <text class="small" x="560" y="270" text-anchor="middle">stream-json parses each array item</text>
+
+  <path class="arrow" d="M560 288 L560 330"/>
+  <rect class="box" x="390" y="330" width="340" height="68"/>
+  <text class="text" x="560" y="359" text-anchor="middle">For each streamed record</text>
+  <text class="small" x="560" y="380" text-anchor="middle">process one player at a time</text>
+
+  <path class="arrow" d="M560 398 L560 440"/>
+  <path class="decision" d="M560 430 L715 500 L560 570 L405 500 Z"/>
+  <text class="text" x="560" y="493" text-anchor="middle">Has value?</text>
+  <text class="small" x="560" y="516" text-anchor="middle">empty record check</text>
+
+  <path class="arrow" d="M405 500 L260 500 L260 360 L382 360"/>
+  <text class="label" x="315" y="488" text-anchor="middle">NO</text>
+  <rect class="skip" x="70" y="466" width="170" height="68"/>
+  <text class="text" x="155" y="496" text-anchor="middle">Skip record</text>
+  <text class="small" x="155" y="517" text-anchor="middle">next record</text>
+
+  <path class="arrow" d="M560 570 L560 620"/>
+  <text class="label" x="584" y="600">YES</text>
+  <path class="decision" d="M560 610 L715 680 L560 750 L405 680 Z"/>
+  <text class="text" x="560" y="673" text-anchor="middle">Has player_id?</text>
+  <text class="small" x="560" y="696" text-anchor="middle">required player identifier</text>
+
+  <path class="arrow" d="M405 680 L250 680"/>
+  <text class="label" x="325" y="668" text-anchor="middle">NO</text>
+  <rect class="skip" x="70" y="646" width="170" height="68"/>
+  <text class="text" x="155" y="676" text-anchor="middle">Count invalid</text>
+  <text class="small" x="155" y="697" text-anchor="middle">skip, next record</text>
+
+  <path class="arrow" d="M560 750 L560 800"/>
+  <text class="label" x="584" y="780">YES</text>
+  <path class="decision" d="M560 790 L715 860 L560 930 L405 860 Z"/>
+  <text class="text" x="560" y="853" text-anchor="middle">Already seen?</text>
+  <text class="small" x="560" y="876" text-anchor="middle">seenPlayerIds has player_id</text>
+
+  <path class="arrow" d="M405 860 L250 860"/>
+  <text class="label" x="325" y="848" text-anchor="middle">YES</text>
+  <rect class="skip" x="70" y="826" width="170" height="68"/>
+  <text class="text" x="155" y="856" text-anchor="middle">Count duplicate</text>
+  <text class="small" x="155" y="877" text-anchor="middle">skip, next record</text>
+
+  <path class="arrow" d="M715 860 L830 860"/>
+  <text class="label" x="765" y="848" text-anchor="middle">NO</text>
+  <rect class="success" x="830" y="826" width="220" height="68"/>
+  <text class="text" x="940" y="856" text-anchor="middle">Accept valid player</text>
+  <text class="small" x="940" y="877" text-anchor="middle">add id to Set + add to chunk</text>
+
+  <path class="arrow" d="M940 826 L940 760"/>
+  <path class="decision" d="M940 630 L1060 695 L940 760 L820 695 Z"/>
+  <text class="text" x="940" y="688" text-anchor="middle">Chunk full?</text>
+  <text class="small" x="940" y="711" text-anchor="middle">3000 valid records</text>
+
+  <path class="arrow" d="M820 695 L740 695 L740 390 L715 390"/>
+  <text class="label" x="774" y="683" text-anchor="middle">NO</text>
+
+  <path class="arrow" d="M940 630 L940 550"/>
+  <text class="label" x="964" y="596">YES</text>
+  <rect class="io" x="830" y="470" width="220" height="80"/>
+  <text class="text" x="940" y="500" text-anchor="middle">Upload chunk to S3</text>
+  <text class="small" x="940" y="521" text-anchor="middle">record uploaded count</text>
+
+  <path class="arrow" d="M830 510 L740 510 L740 390 L715 390"/>
+  <rect class="io" x="830" y="350" width="220" height="68"/>
+  <text class="text" x="940" y="380" text-anchor="middle">Send SQS message</text>
+  <text class="small" x="940" y="401" text-anchor="middle">bucket + chunk key</text>
+  <path class="arrow" d="M940 470 L940 418"/>
+
+  <path class="arrow" d="M560 930 L560 985"/>
+  <text class="label" x="584" y="960">END OF STREAM</text>
+  <rect class="box" x="390" y="985" width="340" height="68"/>
+  <text class="text" x="560" y="1014" text-anchor="middle">Upload final partial chunk</text>
+  <text class="small" x="560" y="1035" text-anchor="middle">if remaining valid players exist</text>
+
+  <path class="arrow" d="M730 1019 L830 1019"/>
+  <rect class="success" x="830" y="985" width="220" height="68"/>
+  <text class="text" x="940" y="1014" text-anchor="middle">Verify and return</text>
+  <text class="small" x="940" y="1035" text-anchor="middle">keys + valid/invalid/duplicate counts</text>
+</svg>
