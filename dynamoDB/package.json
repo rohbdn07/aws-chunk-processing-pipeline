@@ -1,0 +1,17 @@
+{
+  "name": "dynamodb",
+  "version": "1.0.0",
+  "description": "This lambda function create dynamodb table and insert chunks data into table",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.830.0",
+    "@aws-sdk/client-sqs": "^3.831.0",
+    "@aws-sdk/lib-dynamodb": "^3.830.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
