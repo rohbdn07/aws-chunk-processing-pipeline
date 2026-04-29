@@ -23,6 +23,8 @@ SNS (sends completion notification)
         ↓
 SNS.js Listener (HTTP endpoint)
 ```
+![Architecture Diagram](splitter/SplitterAlgorithmFlow.svg)
+
 
 ## Project Structure
 
