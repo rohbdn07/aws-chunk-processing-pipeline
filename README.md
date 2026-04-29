@@ -47,7 +47,7 @@ SNS.js Listener (HTTP endpoint)
 │   ├── variables.tf         # Variable definitions
 │   └── provider.tf          # Provider configuration
 ├── docker-compose.yaml       # LocalStack setup
-└── start-localstack.sh       # Startup script
+└── README.md       # Startup process
 ```
 
 ## Prerequisites
@@ -155,10 +155,6 @@ aws --endpoint-url=http://localhost:4566 --region eu-west-1 s3 ls s3://report-st
 cd splitter
 npm test
 ```
-
-## Optional Task
-
-See `optional-task.asl.json` for the optional Step Function modification task.
 
 ## Cleanup
 
