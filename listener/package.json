@@ -1,0 +1,10 @@
+{
+  "name": "listener",
+  "version": "1.0.0",
+  "main": "SNS.js",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "body-parser": "^1.20.2"
+  }
+}
