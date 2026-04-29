@@ -11,18 +11,18 @@ const { Writable } = require('stream');
 
 const s3Client = new S3Client({
     region: process.env.AWS_REGION || 'eu-west-1',
-    endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_compliance_tech_recruitment_assignment:4566',
+    endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_data_pipeline:4566',
     forcePathStyle: true,
 });
 
 const snsClient = new SNSClient({
     region: process.env.AWS_REGION || 'eu-west-1',
-    endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_compliance_tech_recruitment_assignment:4566',
+    endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_data_pipeline:4566',
 });
 
 const sqsClient = new SQSClient({
     region: process.env.AWS_REGION || 'eu-west-1',
-    endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_compliance_tech_recruitment_assignment:4566',
+    endpoint: process.env.LOCALSTACK_ENDPOINT || 'http://localstack_data_pipeline:4566',
 });
 
 
