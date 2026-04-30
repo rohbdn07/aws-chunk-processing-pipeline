@@ -1,8 +1,10 @@
 # Data Pipeline Project
+## Status
 
-A serverless data processing pipeline that splits large JSON files into smaller chunks using AWS Lambda, Step Functions, SNS, and SQS.
+⚠️  This project is under active development and not intended for production use.
 
 ## Project Overview
+A serverless data processing pipeline that splits large JSON files into smaller chunks using AWS Lambda, Step Functions, SNS, and SQS.
 
 This project processes large JSON files (containing player records) by splitting them into smaller chunks (max 3000 records each) and stores them in S3. It uses AWS Lambda for processing, Step Functions for orchestration, SNS for notifications, and SQS for messaging.
 
